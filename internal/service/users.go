@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/meedoed/auth-rest/internal/domain"
@@ -10,6 +9,7 @@ import (
 	"github.com/meedoed/auth-rest/pkg/auth"
 	"github.com/meedoed/auth-rest/pkg/hash"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UsersService struct {
@@ -30,65 +30,55 @@ func NewUsersService(repo repository.Users, hasher hash.PasswordHasher, tokenMan
 	}
 }
 
-func (s *UsersService) SignUp(ctx context.Context, input UserSignUpInput) error {
-	passwordHash, err := s.hasher.Hash(input.Password)
-	if err != nil {
-		return err
-	}
+func (s *UsersService) GetTokens(ctx context.Context, guid string) (Tokens, error) {
 
-	user := domain.User{
-		Name:         input.Name,
-		Password:     passwordHash,
-		Email:        input.Email,
-		RegisteredAt: time.Now(),
-		LastVisitAt:  time.Now(),
-	}
-
-	if err := s.repo.Create(ctx, user); err != nil {
-		if errors.Is(err, domain.ErrUserAlreadyExists) {
-			return err
-		}
-
-		return err
-	}
-
-	return nil
-}
-
-func (s *UsersService) SignIn(ctx context.Context, input UserSignInInput) (Tokens, error) {
-	passwordHash, err := s.hasher.Hash(input.Password)
+	hex, err := primitive.ObjectIDFromHex(guid)
 	if err != nil {
 		return Tokens{}, err
 	}
 
-	user, err := s.repo.GetByCredentials(ctx, input.Email, passwordHash)
-	if err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			return Tokens{}, err
-		}
-
-		return Tokens{}, err
+	if _, err := s.repo.GetById(ctx, hex); err != nil {
+		return Tokens{}, nil
 	}
 
-	return s.createSession(ctx, user.ID)
-}
-
-func (s *UsersService) RefreshTokens(ctx context.Context, refreshToken string) (Tokens, error) {
-	student, err := s.repo.GetByRefreshToken(ctx, refreshToken)
+	tokens, err := s.createSession(ctx, guid)
 	if err != nil {
 		return Tokens{}, err
 	}
 
-	return s.createSession(ctx, student.ID)
+	return tokens, nil
 }
 
-func (s *UsersService) createSession(ctx context.Context, userId primitive.ObjectID) (Tokens, error) {
+func (s *UsersService) RefreshTokens(ctx context.Context, accessToken, refreshToken string) (Tokens, error) {
+	guid, err := s.tokenManager.Parse(accessToken)
+	if err != nil {
+		return Tokens{}, err
+	}
+
+	hex, err := primitive.ObjectIDFromHex(guid)
+	if err != nil {
+		return Tokens{}, err
+	}
+
+	session, err := s.repo.GetById(ctx, hex)
+	if err != nil {
+		return Tokens{}, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(session.RefreshToken), []byte(refreshToken)); err != nil {
+		return Tokens{}, err
+	}
+
+	return s.createSession(ctx, guid)
+}
+
+func (s *UsersService) createSession(ctx context.Context, guid string) (Tokens, error) {
 	var (
 		res Tokens
 		err error
 	)
 
-	res.AccessToken, err = s.tokenManager.NewJWT(userId.Hex(), s.accessTokenTTL)
+	res.AccessToken, err = s.tokenManager.NewJWT(guid, s.accessTokenTTL)
 	if err != nil {
 		return res, err
 	}
@@ -98,12 +88,22 @@ func (s *UsersService) createSession(ctx context.Context, userId primitive.Objec
 		return res, err
 	}
 
+	hashedToken, err := hash.HashToken(res.RefreshToken)
+	if err != nil {
+		return res, err
+	}
+
 	session := domain.Session{
-		RefreshToken: res.RefreshToken,
+		RefreshToken: hashedToken,
 		ExpiresAt:    time.Now().Add(s.refreshTokenTTL),
 	}
 
-	err = s.repo.SetSession(ctx, userId, session)
+	hex, err := primitive.ObjectIDFromHex(guid)
+	if err != nil {
+		return res, err
+	}
+
+	err = s.repo.SetSession(ctx, hex, session)
 
 	return res, err
 }

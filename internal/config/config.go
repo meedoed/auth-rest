@@ -4,6 +4,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -58,6 +59,10 @@ func Init(configPath string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := godotenv.Load(); err != nil {
+		return nil, err
+	}
+
 	var cfg Config
 	if err := unmarshal(&cfg); err != nil {
 		return nil, err
@@ -87,7 +92,6 @@ func unmarshal(cfg *Config) error {
 }
 
 func setFromEnv(cfg *Config) {
-
 	cfg.Mongo.URI = os.Getenv("MONGO_URI")
 	cfg.Mongo.User = os.Getenv("MONGO_USER")
 	cfg.Mongo.Password = os.Getenv("MONGO_PASS")

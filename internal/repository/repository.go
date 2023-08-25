@@ -9,9 +9,8 @@ import (
 )
 
 type Users interface {
-	Create(ctx context.Context, user domain.User) error
-	GetByCredentials(ctx context.Context, email, password string) (domain.User, error)
 	GetByRefreshToken(ctx context.Context, refreshToken string) (domain.User, error)
+	GetById(ctx context.Context, id primitive.ObjectID) (domain.Session, error)
 	SetSession(ctx context.Context, userID primitive.ObjectID, session domain.Session) error
 }
 

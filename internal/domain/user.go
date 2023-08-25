@@ -13,4 +13,5 @@ type User struct {
 	Password     string             `json:"password" bson:"password"`
 	RegisteredAt time.Time          `json:"registeredAt" bson:"registeredAt"`
 	LastVisitAt  time.Time          `json:"lastVisitAt" bson:"lastVisitAt"`
+	Session      Session            `json:"session" bson:"session"`
 }

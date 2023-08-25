@@ -9,27 +9,14 @@ import (
 	"github.com/meedoed/auth-rest/pkg/hash"
 )
 
-type UserSignUpInput struct {
-	Name     string
-	Email    string
-	Phone    string
-	Password string
-}
-
-type UserSignInInput struct {
-	Email    string
-	Password string
-}
-
 type Tokens struct {
 	AccessToken  string
 	RefreshToken string
 }
 
 type Users interface {
-	SignUp(ctx context.Context, input UserSignUpInput) error
-	SignIn(ctx context.Context, input UserSignInInput) (Tokens, error)
-	RefreshTokens(ctx context.Context, refreshToken string) (Tokens, error)
+	GetTokens(ctx context.Context, guid string) (Tokens, error)
+	RefreshTokens(ctx context.Context, accessToken, refreshToken string) (Tokens, error)
 }
 
 type Services struct {

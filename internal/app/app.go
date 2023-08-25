@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/meedoed/auth-rest/internal/config"
+	"github.com/meedoed/auth-rest/internal/handler"
+	"github.com/meedoed/auth-rest/internal/repository"
 	"github.com/meedoed/auth-rest/internal/server"
+	"github.com/meedoed/auth-rest/internal/service"
 	"github.com/meedoed/auth-rest/pkg/auth"
 	"github.com/meedoed/auth-rest/pkg/database/mongodb"
 	"github.com/meedoed/auth-rest/pkg/hash"
@@ -42,7 +45,16 @@ func Run(configPath string) {
 		return
 	}
 
-	handlers := delivery.NewHandler(services, tokenManager)
+	repos := repository.NewRepository(db)
+	service := service.NewService(service.Deps{
+		Repos:           repos,
+		Hasher:          hasher,
+		TokenManager:    tokenManager,
+		AccessTokenTTL:  cfg.Auth.JWT.AccessTokenTTL,
+		RefreshTokenTTL: cfg.Auth.JWT.RefreshTokenTTL,
+	})
+
+	handlers := handler.NewHandler(service, tokenManager, cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL)
 
 	// HTTP Server
 	srv := server.NewServer(cfg, handlers.Init(cfg))
